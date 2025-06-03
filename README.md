@@ -14,28 +14,31 @@ This project focuses on building a Convolutional Neural Network (CNN) model to c
 * **Dockerization (Future)**: (Optional, could be added later) Containerize the API for easy deployment.
 
 ## Project Structure
-aiProject/
-├── api/
-│   ├── app.py                     # FastAPI application to serve the model
-│   └── requirements.txt           # Python dependencies for the API
-├── data/
-│   └── archive/
-│       └── nhcd/
-│           └── nhcd/              # Root directory of the Devanagari dataset (nhcd dataset)
-│               ├── consonants/    # Contains folders for individual consonant characters (e.g., 'ka', 'kha')
-│               ├── numerals/      # Contains folders for individual numeral characters (e.g., '0', '1')
-│               └── vowels/        # Contains folders for individual vowel characters (e.g., 'a', 'aa')
-│           └── labels.csv         # (If your dataset includes a labels file)
-├── models/
-│   ├── devanagari_model.h5        # Trained Keras model (will be generated after notebook execution)
-│   └── class_names.json           # JSON file mapping class IDs to Devanagari characters (generated)
-├── notebooks/
-│   ├── devanagari_classification.ipynb # Jupyter Notebook for model training and evaluation
-│   └── requirements.txt           # Python dependencies for the notebook
-└── utils/
-├── init.py                # Makes 'utils' a Python package
-└── data_loader.py             # Utility functions for loading and preprocessing the dataset
-└── venv/                          # Python Virtual Environment (ignored by Git)
+
+* `aiProject/` (Your project root directory)
+    * `api/`
+        * `app.py` # FastAPI application to serve the model
+        * `requirements.txt` # Python dependencies for the API
+    * `data/`
+        * `archive/`
+            * `nhcd/`
+                * `nhcd/` # Root directory of the Devanagari dataset (nhcd dataset)
+                    * `consonants/` # Contains folders for individual consonant characters (e.g., 'ka', 'kha')
+                    * `numerals/` # Contains folders for individual numeral characters (e.g., '0', '1')
+                    * `vowels/` # Contains folders for individual vowel characters (e.g., 'a', 'aa')
+                * `labels.csv` # (Optional: If your dataset includes a labels file)
+    * `models/`
+        * `devanagari_model.h5` # Trained Keras model (will be generated after notebook execution)
+        * `class_names.json` # JSON file mapping class IDs to Devanagari characters (generated)
+    * `notebooks/`
+        * `devanagari_classification.ipynb` # Jupyter Notebook for model training and evaluation
+        * `requirements.txt` # Python dependencies for the notebook
+    * `utils/`
+        * `__init__.py` # Makes 'utils' a Python package
+        * `data_loader.py` # Utility functions for loading and preprocessing the dataset
+    * `venv/` # Python Virtual Environment (ignored by Git)
+    * `.gitignore` # Specifies intentionally untracked files to ignore by Git
+    * `README.md` # This project's README file
  
 ## Dataset
 
