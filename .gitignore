@@ -1,0 +1,29 @@
+# Virtual Environment
+venv/
+
+# Saved Models
+models/*.h5
+models/*.keras # If you save in .keras format later
+models/devanagari_model.h5 # Explicitly ignore the model file if it's large
+
+# Dataset (if too large for GitHub)
+data/archive/nhcd/ # This folder contains your actual images
+data/archive/nhcd/*.* # To ignore any loose files directly in nhcd folder
+
+# Jupyter Notebook specific files
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Environment variables (if you had a .env file)
+.env
+
+# VS Code settings
+.vscode/
+
+# Any other temporary files
+*.log
+*.tmp
