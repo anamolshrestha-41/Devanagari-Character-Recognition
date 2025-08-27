@@ -130,10 +130,6 @@ Refer to the `requirements.txt` files in the `api/` and `notebooks/` directories
 * `Pillow` (PIL)
 * `opencv-python`
 
-## License
-
-This project is licensed under the [MIT License](LICENSE). (Create a `LICENSE` file if you want to explicitly define this.)
-
 ## Contact
 
 For any questions or suggestions, feel free to contact:
