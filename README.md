@@ -105,15 +105,7 @@ Sequential([
 
 **Parameters**: 1.14M | **Input**: 64×64 grayscale | **Output**: 37 classes
 
-## 🌐 API Usage
 
-### Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| `GET` | `/` | Health check |
-| `POST` | `/predict/` | Character prediction |
-| `GET` | `/docs` | Interactive API docs |
 
 ### Example Request
 
@@ -189,24 +181,6 @@ Checks:
 - `seaborn>=0.11.0`
 - `opencv-python>=4.5.0`
 
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 👨‍💻 Author
-
-**Anamol Shrestha**
-- 📧 Email: [contact@anamol.dev](mailto:contact@anamol.dev)
-- 🔗 LinkedIn: [linkedin.com/in/anamol](https://linkedin.com/in/anamol)
-- 🐙 GitHub: [@anamol](https://github.com/anamol)
 
 ## 🙏 Acknowledgments
 
