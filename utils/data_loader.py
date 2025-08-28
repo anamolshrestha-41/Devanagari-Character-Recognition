@@ -1,192 +1,205 @@
-# utils/data_loader.py
-import cv2 # Often used for image operations, especially if you handle non-standard formats
-from PIL import Image
-import numpy as np
 import os
-import tensorflow as tf # Used for tf.keras.utils.to_categorical
-from sklearn.model_selection import train_test_split # Used for splitting dataset
+import numpy as np
+from PIL import Image
+import cv2 # For loading images if not using PIL for all cases
+import tensorflow as tf # For preprocessing, e.g., tf.image functions
+
+# Define a mapping from folder names (as they appear in your dataset)
+# to Devanagari characters. You MUST verify these against your actual dataset's folder names.
+# Add any missing mappings based on the warnings you saw.
+# Numerals mapping
+NUMERAL_MAPPING = {
+    '0': '०', '1': '१', '2': '२', '3': '३', '4': '४',
+    '5': '५', '6': '६', '7': '७', '8': '८', '9': '९'
+}
+
+# Consonants mapping
+CONSONANT_MAPPING = {
+    '1': 'क', '2': 'ख', '3': 'ग', '4': 'घ', '5': 'ङ',
+    '6': 'च', '7': 'छ', '8': 'ज', '9': 'झ', '10': 'ञ',
+    '11': 'ट', '12': 'ठ', '13': 'ड', '14': 'ढ', '15': 'ण',
+    '16': 'त', '17': 'थ', '18': 'द', '19': 'ध', '20': 'न',
+    '21': 'प', '22': 'फ', '23': 'ब', '24': 'भ', '25': 'म',
+    '26': 'य', '27': 'र', '28': 'ल', '29': 'व', '30': 'श',
+    '31': 'ष', '32': 'स', '33': 'ह', '34': 'क्ष', '35': 'त्र', '36': 'ज्ञ'
+}
+
+# Vowels mapping
+VOWEL_MAPPING = {
+    '1': 'अ', '2': 'आ', '3': 'इ', '4': 'ई', '5': 'उ',
+    '6': 'ऊ', '7': 'ऋ', '8': 'ए', '9': 'ऐ', '10': 'ओ',
+    '11': 'औ', '12': 'अं', '13': 'अः'
+}
+
+FOLDER_NAME_TO_DEVANAGARI_CHAR = {}
+
 
 def preprocess_image(image_input, target_size=(64, 64), grayscale=True, normalize=True):
     """
-    Preprocesses an image to be ready for model input.
-    This function should be identical to the one used during model training.
+    Preprocesses a single image for model input.
 
     Args:
-        image_input: Can be a PIL Image object or a NumPy array.
-        target_size (tuple): Desired (width, height) of the output image.
+        image_input: Can be a file path (str), a NumPy array (OpenCV format), or a PIL Image object.
+        target_size (tuple): Desired (height, width) for the image.
         grayscale (bool): Whether to convert the image to grayscale.
-        normalize (bool): Whether to normalize pixel values from [0, 255] to [0, 1].
+        normalize (bool): Whether to normalize pixel values to [0, 1].
 
     Returns:
-        numpy.ndarray: The preprocessed image array with shape (height, width, channels),
-                       ready for model input (after adding a batch dimension).
+        np.array: Preprocessed image as a NumPy array, ready for model input.
     """
-    # Ensure input is a PIL Image object for consistent processing
-    if isinstance(image_input, np.ndarray):
-        # Assuming BGR for OpenCV arrays, convert to RGB for PIL
-        if image_input.ndim == 3 and image_input.shape[2] == 3:
-            image = Image.fromarray(cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB))
-        elif image_input.ndim == 2: # Grayscale NumPy array
-            image = Image.fromarray(image_input)
-        else:
-            raise TypeError("Unsupported NumPy array format for image_input.")
+    if isinstance(image_input, str):
+        # If input is a file path, load using PIL or OpenCV
+        if not os.path.exists(image_input):
+            raise FileNotFoundError(f"Image file not found: {image_input}")
+        try:
+            # Use PIL for loading (more robust for various image types)
+            image = Image.open(image_input).convert('RGB')
+        except Exception as e:
+            raise IOError(f"Could not load image from {image_input}: {e}")
+    elif isinstance(image_input, np.ndarray):
+        # If input is a NumPy array (e.g., from OpenCV), convert to PIL Image for consistent processing
+        image = Image.fromarray(cv2.cvtColor(image_input, cv2.COLOR_BGR2RGB))
     elif isinstance(image_input, Image.Image):
-        image = image_input
+        # If input is already a PIL Image
+        image = image_input.convert('RGB')
     else:
-        raise TypeError("image_input must be a PIL Image or NumPy array.")
+        raise TypeError("image_input must be a file path (str), NumPy array, or PIL Image object.")
 
     # Resize the image
     image = image.resize(target_size, Image.LANCZOS) # Use LANCZOS for high-quality downsampling
 
     # Convert to grayscale if required
     if grayscale:
-        image = image.convert('L') # 'L' mode for grayscale
+        image = image.convert('L') # Convert to single channel grayscale
 
-    # Convert PIL Image to NumPy array
-    img_array = np.array(image)
+    # Convert to NumPy array
+    # If grayscale, shape will be (height, width)
+    # If not grayscale (RGB), shape will be (height, width, 3)
+    image_array = np.array(image)
 
-    # Add channel dimension if it's missing (e.g., for grayscale images)
-    # Model expects (height, width, channels)
-    if img_array.ndim == 2: # Grayscale image
-        img_array = np.expand_dims(img_array, axis=-1) # Becomes (height, width, 1)
-    elif img_array.ndim == 3 and img_array.shape[-1] == 4: # RGBA image
-        img_array = img_array[..., :3] # Remove alpha channel if not grayscale
+    # Add channel dimension if grayscale (from (H, W) to (H, W, 1))
+    if grayscale:
+        image_array = np.expand_dims(image_array, axis=-1) # Add channel dimension
 
-    # Normalize pixel values to [0, 1]
+    # Normalize pixel values
     if normalize:
-        img_array = img_array / 255.0
+        image_array = image_array / 255.0
 
-    return img_array
+    return image_array
 
-# --- IMPORTANT: Define your 58 Devanagari characters in the EXACT order of your labels ---
-# This list MUST match the order used to assign integer IDs during model training.
-# You need to fill this out completely based on your dataset's classes.
-# The order here determines the class_id (index).
-ALL_DEVANAGARI_CHARS = [
-    # 36 Consonants (Example, YOU NEED TO LIST ALL 36 IN YOUR DATASET'S ORDER)
-    'क', 'ख', 'ग', 'घ', 'ङ', 'च', 'छ', 'ज', 'झ', 'ञ',
-    'ट', 'ठ', 'ड', 'ढ', 'ण', 'त', 'थ', 'द', 'ध', 'न',
-    'प', 'फ', 'ब', 'भ', 'म', 'य', 'र', 'ल', 'व', 'श',
-    'ष', 'स', 'ह', 'क्ष', 'त्र', 'ज्ञ', # Example for compound consonants, verify if your dataset has these
+# Update the mapping based on category
+def get_character_mapping(category_name, folder_name):
+    if category_name == 'numerals':
+        return NUMERAL_MAPPING.get(folder_name)
+    elif category_name == 'consonants':
+        return CONSONANT_MAPPING.get(folder_name)
+    elif category_name == 'vowels':
+        return VOWEL_MAPPING.get(folder_name)
+    return None
 
-    # 12 Vowels (Example, YOU NEED TO LIST ALL 12 IN YOUR DATASET'S ORDER)
-    'अ', 'आ', 'इ', 'ई', 'उ', 'ऊ', 'ऋ', 'ए', 'ऐ', 'ओ', 'औ', 'अं', # Common 12 vowels including Anusvara for some datasets
-
-    # 10 Numbers (All 10 - Standard Unicode)
-    '०', '१', '२', '३', '४', '५', '६', '७', '८', '९'
-]
-
-# This dictionary maps the textual folder names (or inferred character names from filenames)
-# to their corresponding Devanagari Unicode characters.
-# You MUST verify and complete this mapping based on your specific dataset's folder names/naming conventions.
-# Use .lower() on folder names to handle case inconsistencies.
-FOLDER_NAME_TO_DEVANAGARI_CHAR = {
-    # Consonants (Example mappings - VERIFY WITH YOUR ACTUAL FOLDER NAMES)
-    'ka': 'क', 'kha': 'ख', 'ga': 'ग', 'gha': 'घ', 'nga': 'ङ',
-    'cha': 'च', 'chha': 'छ', 'ja': 'ज', 'jha': 'झ', 'nya': 'ञ',
-    'tta': 'ट', 'ttha': 'ठ', 'dda': 'ड', 'ddha': 'ढ', 'nna': 'ण', # These names might vary significantly in your dataset, e.g., 'ta_retroflex'
-    'ta': 'त', 'tha': 'थ', 'da': 'द', 'dha': 'ध', 'na': 'न',
-    'pa': 'प', 'pha': 'फ', 'ba': 'ब', 'bha': 'भ', 'ma': 'म',
-    'ya': 'य', 'ra': 'र', 'la': 'ल', 'va': 'व', 'sha': 'श',
-    'shha': 'ष', 'sa': 'स', 'ha': 'ह',
-    'ksha': 'क्ष', 'tra': 'त्र', 'gya': 'ज्ञ', # Common compound characters - include only if your dataset has them
-
-    # Vowels (Example mappings - VERIFY WITH YOUR ACTUAL FOLDER NAMES)
-    'a': 'अ', 'aa': 'आ', 'i': 'इ', 'ee': 'ई', 'u': 'उ', 'oo': 'ऊ',
-    'rri': 'ऋ', 'e': 'ए', 'ai': 'ऐ', 'o': 'ओ', 'au': 'औ', 'am': 'अं', # Folder names might be like 'a_vowel', 'aa_vowel', 'anusvara' etc.
-
-    # Numbers (Example mappings - VERIFY WITH YOUR ACTUAL FOLDER NAMES)
-    '0': '०', '1': '१', '2': '२', '3': '३', '4': '४',
-    '5': '५', '6': '६', '7': '७', '8': '८', '9': '९'
-}
-
-
-def load_devanagari_dataset(data_root_dir, target_size=(64, 64), grayscale=True, normalize=True):
+def load_devanagari_dataset(data_root_dir_absolute, target_size=(64, 64), grayscale=True, normalize=True):
     """
-    Loads the Devanagari character dataset from the specified directory structure,
-    preprocesses images, and assigns one-hot encoded labels.
+    Loads and preprocesses the Devanagari character dataset from the specified root directory.
 
     Args:
-        data_root_dir (str): Path to the root directory containing 'consonants', 'numerals', 'vowels' folders.
-                             E.g., 'data/archive/nhcd/nhcd'
-        target_size (tuple): Desired (width, height) for image preprocessing.
+        data_root_dir_absolute (str): The absolute path to the 'nhcd/nhcd' directory
+                                      containing 'consonants', 'numerals', 'vowels' subfolders.
+        target_size (tuple): Desired (height, width) for image preprocessing.
         grayscale (bool): Whether to convert images to grayscale.
         normalize (bool): Whether to normalize pixel values to [0, 1].
 
     Returns:
-        tuple: (images, labels_one_hot, class_names, class_to_id_map)
-            images (np.ndarray): Array of preprocessed images.
-            labels_one_hot (np.ndarray): One-hot encoded labels.
-            class_names (list): List of character names corresponding to class IDs (same as ALL_DEVANAGARI_CHARS).
-            class_to_id_map (dict): Dictionary mapping character names to class IDs.
+        tuple: (images (np.array), labels (np.array), class_names (list))
+               images: Stacked preprocessed image arrays.
+               labels: Integer labels corresponding to each image.
+               class_names: List of Devanagari characters in the order of their assigned labels.
     """
-    images = []
-    labels = [] # Integer labels
+    all_images = []
+    all_labels = []
+    class_name_to_label = {} # Maps Devanagari char to integer label
+    label_to_class_name = [] # Maps integer label to Devanagari char
 
-    # Build the class_to_id_map based on ALL_DEVANAGARI_CHARS order
-    class_to_id_map = {char: idx for idx, char in enumerate(ALL_DEVANAGARI_CHARS)}
-    class_names = ALL_DEVANAGARI_CHARS # This will be the list passed to the API
+    current_label = 0
 
-    # Assuming the data structure is data_root_dir/[category]/[character_folder]/image.png
-    categories = ['consonants', 'numerals', 'vowels']
-    total_images_loaded = 0
+    if not os.path.exists(data_root_dir_absolute):
+        raise FileNotFoundError(f"Data root directory not found: {data_root_dir_absolute}")
+    if not os.path.isdir(data_root_dir_absolute):
+        raise NotADirectoryError(f"Data root path is not a directory: {data_root_dir_absolute}")
 
-    print(f"Starting dataset loading from: {os.path.abspath(data_root_dir)}")
+    # Categories are usually 'consonants', 'numerals', 'vowels'
+    # Iterate through these primary categories
+    for category_name in os.listdir(data_root_dir_absolute):
+        category_path = os.path.join(data_root_dir_absolute, category_name)
 
-    for category in categories:
-        category_path = os.path.join(data_root_dir, category)
         if not os.path.isdir(category_path):
-            print(f"  WARNING: Category directory '{category_path}' not found. Skipping '{category}'.")
-            continue
-        else:
-            print(f"  Processing category: {category_path}")
+            continue # Skip any non-directory files like .DS_Store or READMEs
 
-        # Iterate through character subfolders (e.g., 'ka', '0', 'a', 'aa')
-        for char_folder_name in os.listdir(category_path):
-            char_folder_path = os.path.join(category_path, char_folder_name)
-            if not os.path.isdir(char_folder_path): # Skip non-directories
+        print(f"Processing category: {category_path}")
+
+        # Iterate through subfolders (e.g., '0', '1', 'क', 'ख') within each category
+        for folder_name in sorted(os.listdir(category_path)):
+            folder_path = os.path.join(category_path, folder_name)
+
+            if not os.path.isdir(folder_path):
                 continue
 
-            # Get the actual Devanagari character from the folder name using your mapping
-            devanagari_char = FOLDER_NAME_TO_DEVANAGARI_CHAR.get(char_folder_name.lower()) # Use .lower() for robust matching
+            # Map folder name to Devanagari character based on category
+            devanagari_char = get_character_mapping(category_name, folder_name)
+
             if devanagari_char is None:
-                print(f"    WARNING: Folder name '{char_folder_name}' not found in FOLDER_NAME_TO_DEVANAGARI_CHAR mapping. Skipping this folder.")
+                print(f"    WARNING: Folder name '{folder_name}' in category '{category_name}' not found in mapping. Skipping this folder.")
                 continue
 
-            # Get the integer class ID for this Devanagari character
-            class_id = class_to_id_map.get(devanagari_char)
-            if class_id is None:
-                print(f"    WARNING: Devanagari character '{devanagari_char}' (from folder '{char_folder_name}') not found in ALL_DEVANAGARI_CHARS list. Skipping this folder.")
-                continue
+            # Assign a unique integer label if this character is new
+            if devanagari_char not in class_name_to_label:
+                class_name_to_label[devanagari_char] = current_label
+                label_to_class_name.append(devanagari_char)
+                current_label += 1
 
-            # Load images from the character folder
+            label = class_name_to_label[devanagari_char]
             images_in_folder = 0
-            for image_filename in os.listdir(char_folder_path):
-                # Ensure it's an image file by checking common extensions
-                if image_filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
-                    image_path = os.path.join(char_folder_path, image_filename)
+
+            # Iterate through image files in the current character folder
+            for image_file in os.listdir(folder_path):
+                if image_file.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.tiff')):
+                    image_path = os.path.join(folder_path, image_file)
                     try:
-                        # Load and preprocess the image
-                        img = Image.open(image_path).convert('RGB') # Load as RGB first
-                        preprocessed_img = preprocess_image(img, target_size, grayscale, normalize)
-                        images.append(preprocessed_img)
-                        labels.append(class_id)
+                        # Use the universal preprocess_image function
+                        processed_img = preprocess_image(
+                            image_path,
+                            target_size=target_size,
+                            grayscale=grayscale,
+                            normalize=normalize
+                        )
+                        all_images.append(processed_img)
+                        all_labels.append(label)
                         images_in_folder += 1
-                        total_images_loaded += 1
-                    except Exception as e:
-                        print(f"      ERROR: Could not load or preprocess image {image_path}: {e}")
-            print(f"    Loaded {images_in_folder} images from folder '{char_folder_name}' (Devanagari: '{devanagari_char}').")
+                    except (IOError, FileNotFoundError, TypeError) as e:
+                        print(f"        ERROR: Could not process image {image_path}: {e}")
+                        continue
+            if images_in_folder > 0:
+                print(f"    Loaded {images_in_folder} images from folder '{folder_name}' (Devanagari: '{devanagari_char}').")
+            else:
+                print(f"    No images loaded from folder '{folder_name}' (Devanagari: '{devanagari_char}').")
 
-    # Convert lists to NumPy arrays
-    images_array = np.array(images)
-    labels_array = np.array(labels)
 
-    # One-hot encode the integer labels
-    if len(labels_array) > 0:
-        labels_one_hot = tf.keras.utils.to_categorical(labels_array, num_classes=len(ALL_DEVANAGARI_CHARS))
-        print(f"Successfully loaded {total_images_loaded} images across {len(class_names)} classes.")
-    else:
-        labels_one_hot = np.array([]) # Return empty array if no labels were loaded
-        print(f"WARNING: No images were loaded from {os.path.abspath(data_root_dir)}. Please check your DATA_ROOT_DIR, folder names, and mappings.")
+    if not all_images:
+        raise ValueError("No data loaded. Please check data_root_dir_absolute and FOLDER_NAME_TO_DEVANAGARI_CHAR mapping.")
 
-    return images_array, labels_one_hot, class_names, class_to_id_map
+    # Convert lists to numpy arrays
+    images_np = np.array(all_images)
+    labels_np = np.array(all_labels)
+
+    # Ensure class_names list is sorted by label ID
+    # This is implicitly handled by `label_to_class_name.append(devanagari_char)`
+    # if `current_label` increments correctly.
+    # But if you want to be extra safe, sort based on actual labels.
+    # For simplicity, if `label_to_class_name` builds correctly, it should be ordered.
+    final_class_names = [item[0] for item in sorted(class_name_to_label.items(), key=lambda x: x[1])]
+
+
+    print(f"\nSuccessfully loaded {len(all_images)} images across {len(final_class_names)} unique classes.")
+    print(f"Unique characters found: {', '.join(final_class_names)}")
+    print(f"Image shape after preprocessing: {images_np.shape[1:]}")
+
+    return images_np, labels_np, final_class_names

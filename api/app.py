@@ -1,4 +1,3 @@
-# api/app.py
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from pydantic import BaseModel
 import numpy as np
@@ -7,118 +6,111 @@ import io
 import tensorflow as tf
 import json
 import os
+import sys
 
-# Import your data loader functions - make sure utils/__init__.py exists
-from utils.data_loader import preprocess_image
+# Add the project root to sys.path so utils can be imported
+# This assumes app.py is in aiProject/api/
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.append(project_root)
 
-app = FastAPI(
-    title="Devanagari Character Classifier API",
-    description="API for classifying Devanagari characters from images.",
-    version="1.0.0",
-)
+# Now import from utils
+from utils.data_loader import preprocess_image # Ensure this function exists in data_loader.py
 
-# --- Configuration (MUST match your model training/saving) ---
-MODEL_PATH = "models/devanagari_model.h5"
-CLASS_NAMES_PATH = "models/class_names.json"
-MODEL_TARGET_SIZE = (64, 64) # e.g., 64x64 pixels
-MODEL_GRAYSCALE = True       # Whether the model expects grayscale images
-MODEL_NORMALIZE = True       # Whether pixel values should be normalized to [0, 1]
+app = FastAPI()
 
-# Global variables to hold the loaded model and character map
+# Define model and class names paths relative to the project root
+MODEL_PATH = os.path.join(project_root, 'models', 'devanagari_model.h5')
+CLASS_NAMES_PATH = os.path.join(project_root, 'models', 'class_names.json')
+
 model = None
-character_map = None
+class_names = []
 
+# Model preprocessing settings - MUST match what was used during training in the notebook
+IMAGE_TARGET_SIZE = (64, 64)
+IMAGE_GRAYSCALE = True
+IMAGE_NORMALIZE = True
+
+# Event handler to load the model and class names when the API starts
 @app.on_event("startup")
 async def load_resources():
-    """Load the model and class names when the API starts up."""
-    global model, character_map
-
-    # --- Load TensorFlow Model ---
-    if not os.path.exists(MODEL_PATH):
-        print(f"Error: Model file not found at {os.path.abspath(MODEL_PATH)}")
-        raise RuntimeError(f"Model file not found: {MODEL_PATH}")
+    global model, class_names
+    print("Attempting to load model and class names...")
     try:
+        # Load the Keras model
         model = tf.keras.models.load_model(MODEL_PATH)
-        print(f"Model loaded successfully from {MODEL_PATH}!")
+        print(f"Model loaded successfully from {MODEL_PATH}")
     except Exception as e:
+        # Raise a runtime error to prevent the app from starting if model fails to load
         print(f"Error loading model from {MODEL_PATH}: {e}")
-        # Re-raise the exception to prevent the server from starting with a broken model
         raise RuntimeError(f"Could not load model: {e}")
 
-    # --- Load Class Names (character_map) ---
-    if not os.path.exists(CLASS_NAMES_PATH):
-        print(f"Error: Class names file not found at {os.path.abspath(CLASS_NAMES_PATH)}")
-        raise RuntimeError(f"Class names file not found: {CLASS_NAMES_PATH}")
     try:
+        # Load class names
         with open(CLASS_NAMES_PATH, 'r', encoding='utf-8') as f:
-            character_map = json.load(f)
-        print(f"Class names loaded successfully! Found {len(character_map)} classes.")
-    except json.JSONDecodeError as e:
-        print(f"Error decoding JSON from {CLASS_NAMES_PATH}: {e}")
-        raise RuntimeError(f"Could not load class names (JSON error): {e}")
+            class_names = json.load(f)
+        print(f"Class names loaded successfully from {CLASS_NAMES_PATH}")
     except Exception as e:
+        # Raise a runtime error if class names fail to load
         print(f"Error loading class names from {CLASS_NAMES_PATH}: {e}")
         raise RuntimeError(f"Could not load class names: {e}")
 
-class PredictionResponse(BaseModel):
-    """Pydantic model for the API response."""
-    predicted_character: str
-    confidence: float
+    print(f"Model input shape: {model.input_shape}")
+    print(f"Number of classes in loaded model: {model.output_shape[-1]}")
+    if len(class_names) > 0:
+        print(f"First few loaded class names: {class_names[:5]}")
+    else:
+        print("No class names loaded.")
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict_character(file: UploadFile = File(...)):
-    """
-    Predicts the Devanagari character from an uploaded image.
-    """
-    if model is None or character_map is None:
-        # This check should ideally not be hit if startup event works, but good for safety
-        raise HTTPException(status_code=500, detail="Model or character map not loaded. API is not ready.")
-
-    # Validate file type
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Uploaded file is not an image. Please upload an image file.")
-
-    try:
-        # Read image file content
-        contents = await file.read()
-        # Open image using Pillow and convert to RGB (standard format)
-        image = Image.open(io.BytesIO(contents)).convert("RGB")
-
-        # Preprocess the image using the shared utility function
-        processed_image = preprocess_image(
-            image,
-            target_size=MODEL_TARGET_SIZE,
-            grayscale=MODEL_GRAYALE,
-            normalize=MODEL_NORMALIZE
-        )
-
-        # Add a batch dimension (model expects a batch of images)
-        # e.g., from (H, W, C) to (1, H, W, C)
-        prediction = model.predict(np.expand_dims(processed_image, axis=0))[0]
-
-        # Get the predicted class ID and its confidence score
-        predicted_class_id = np.argmax(prediction)
-        confidence = float(np.max(prediction))
-
-        # Map the numerical class ID back to the actual Devanagari character
-        if 0 <= predicted_class_id < len(character_map):
-            predicted_char = character_map[predicted_class_id]
-        else:
-            predicted_char = "Unknown Character (ID out of bounds)" # Fallback for unexpected IDs
-
-        # Return the prediction
-        return PredictionResponse(
-            predicted_character=predicted_char,
-            confidence=confidence
-        )
-
-    except Exception as e:
-        # Log the detailed error for debugging purposes (server-side)
-        print(f"Prediction error: {e}")
-        # Return a generic 500 error to the client to avoid exposing internal details
-        raise HTTPException(status_code=500, detail=f"Error processing image or making prediction. Please try again or contact support if the issue persists.")
 
 @app.get("/")
 async def root():
-    """Root endpoint for basic API health check."""
-    return {"message": "Devanagari Character Classifier API is running!"}
+    return {"message": "Devanagari Character Classification API. Visit /docs for more info."}
+
+# Define the prediction endpoint
+@app.post("/predict/")
+async def predict_character(file: UploadFile = File(...)):
+    if model is None:
+        # This should ideally not happen if startup event handled correctly, but good for safety
+        raise HTTPException(status_code=500, detail="Model not loaded. Server startup error.")
+    if not class_names:
+        raise HTTPException(status_code=500, detail="Class names not loaded. Server startup error.")
+
+    try:
+        # Read the image bytes from the uploaded file
+        image_bytes = await file.read()
+        # Open the image using PIL (Pillow)
+        image_pil = Image.open(io.BytesIO(image_bytes))
+
+        # Preprocess the image using the same utility function as the notebook
+        processed_image = preprocess_image(
+            image_pil, # Pass the PIL Image object directly
+            target_size=IMAGE_TARGET_SIZE,
+            grayscale=IMAGE_GRAYSCALE,
+            normalize=IMAGE_NORMALIZE
+        )
+
+        # Expand dimensions to create a batch of 1 image
+        # Model expects input in batch format (batch_size, height, width, channels)
+        input_image = np.expand_dims(processed_image, axis=0)
+
+        # Make prediction
+        predictions = model.predict(input_image)
+        predicted_class_id = np.argmax(predictions[0])
+
+        if predicted_class_id >= len(class_names):
+            raise ValueError(f"Predicted class ID {predicted_class_id} is out of bounds for class_names (size {len(class_names)}).")
+
+        predicted_character = class_names[predicted_class_id]
+        confidence = float(np.max(predictions[0]))
+
+        return {
+            "filename": file.filename,
+            "predicted_character": predicted_character,
+            "confidence": confidence,
+            "predicted_class_id": int(predicted_class_id) # Convert to standard int for JSON
+        }
+
+    except Exception as e:
+        print(f"Error during prediction: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to process image or make prediction: {e}")
